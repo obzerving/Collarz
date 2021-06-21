@@ -4,8 +4,8 @@
   <id>org.inkscape.collarz</id>
     <param name="usermenu" type="notebook">
       <page name="settings" gui-text="Settings">
-        <param name ="polysides" type="int" min="3" max="30" gui-text="Number of Polygon Sides:">6</param>
-        <param name ="poly1size" type="float" min="0.5" max="9999.0" gui-text="Size of Polygon 1 (in Dimensional Units):">5.0</param>
+        <param name ="polysides" type="int" min="3" max="360" gui-text="Number of Polygon Sides:">6</param>
+        <param name ="poly1size" type="float" min="0.2" max="9999.0" gui-text="Size of Polygon 1 (in Dimensional Units):">5.0</param>
         <param name ="poly2size" type="float" min="0.2" max="9999.0" gui-text="Size of Polygon 2 (in Dimensional Units):">3.0</param>
         <param name ="collarheight" type="float" min="0.2" max="9999.0" gui-text="Height of Collar (in Dimensional Units):">5.0</param>
         <param name ="collarparts" type="int" min="1" max="10" gui-text="Number of parts to divide collar into:">1</param>
