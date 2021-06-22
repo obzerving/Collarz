@@ -13,4 +13,4 @@ See the file [How_to_use_collarz.pdf](https://github.com/obzerving/Collarz/blob/
 
 Note:
 
-This extension (for Inkscape version 1.1.) is still under development and the code reflects it. It's functional, but not yet bulletproof, so be mindful of the input constraints in the usage document.
+This extension (for Inkscape version 1.1.) is functional, but not bulletproof, so be mindful of the input constraints in the usage document.
