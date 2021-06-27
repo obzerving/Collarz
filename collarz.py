@@ -28,12 +28,6 @@ import inkex
 import math
 import copy
 
-class Node:
-   def __init__(self):
-      self.x = 0.0
-      self.y = 0.0
-      self.rotval = 0.0
-   
 class pathStruct(object):
     def __init__(self):
         self.id="path0000"
@@ -500,7 +494,7 @@ class Collar(inkex.EffectExtension):
              nodes = []
              nd = []
              for i in range(4):
-                nd.append(Node())
+                nd.append(inkex.paths.Line(0.0,0.0))
           else:
              # Second time through, empty the storage areas
              i = 0
@@ -579,27 +573,29 @@ class Collar(inkex.EffectExtension):
                 for pn in range(startpc, endpc):
                    # First half
                    if(pn == startpc):
-                      x0 = pieces[pn][0].x
-                      y0 = pieces[pn][0].y
-                      dwrap +='M '+str(pieces[pn][0].x)+','+str(pieces[pn][0].y)
+                      ppt0 = inkex.paths.Move(pieces[pn][0].x,pieces[pn][0].y)
+                      dwrap +='M '+str(ppt0.x)+','+str(ppt0.y)
                       # We're also creating wpath for later use in creating the model
-                      wpath.path.append(inkex.paths.Move(pieces[pn][0].x,pieces[pn][0].y))
-                   dwrap +=' L '+str(pieces[pn][1].x)+','+str(pieces[pn][1].y)
-                   wpath.path.append(inkex.paths.Line(pieces[pn][1].x,pieces[pn][1].y))
-                   # Put scorelines across the collar
-                   spaths = self.makescore(pieces[pn][1], pieces[pn][2],dashlength)
-                   dscores.append(spaths)
+                      wpath.path.append(ppt0)
+                   ppt1 = inkex.paths.Line(pieces[pn][1].x,pieces[pn][1].y)
+                   dwrap +=' L '+str(ppt1.x)+','+str(ppt1.y)
+                   wpath.path.append(ppt1)
+                   if pn < endpc - 1:
+                      # Put scorelines across the collar
+                      ppt2 = inkex.paths.Line(pieces[pn][2].x,pieces[pn][2].y)
+                      spaths = self.makescore(ppt1, ppt2,dashlength)
+                      dscores.append(spaths)
                 for pn in range(endpc-1, startpc-1, -1):
                    # Second half
                    if(pn == (endpc-1)):
+                      ppt2 = inkex.paths.Line(pieces[pn][2].x,pieces[pn][2].y)
                       dwrap +=' L '+str(pieces[pn][2].x)+','+str(pieces[pn][2].y)
                       wpath.path.append(inkex.paths.Line(pieces[pn][2].x,pieces[pn][2].y))
-                   dwrap +=' L '+str(pieces[pn][3].x)+','+str(pieces[pn][3].y)
+                   ppt3 = inkex.paths.Line(pieces[pn][3].x,pieces[pn][3].y)
+                   dwrap +=' L '+str(ppt3.x)+','+str(ppt3.y)
                    wpath.path.append(inkex.paths.Line(pieces[pn][3].x,pieces[pn][3].y))
-                   spaths = self.makescore(pieces[pn][1], pieces[pn][2],dashlength)
-                   dscores.append(spaths)
                 dwrap +=' Z' # Close off the wrapper's path
-                wpath.path.append(inkex.paths.Line(x0,y0))
+                wpath.path.append(ppt0)
                 if math.isclose(dashlength, 0.0):
                    # lump together all the score lines
                    dscore = ''
@@ -657,8 +653,8 @@ class Collar(inkex.EffectExtension):
                       dprop +=' L '+str(tabpt1.x)+','+str(tabpt1.y)
                       dprop +=' L '+str(tabpt2.x)+','+str(tabpt2.y)
                       # Create a scoreline along the tab
-                      spaths = self.makescore(pieces[pn][1], pieces[pn][2],dashlength)
-                      dscores.append(spaths)
+                      #spaths = self.makescore(pieces[pn][1], pieces[pn][2],dashlength)
+                      #dscores.append(spaths)
                    dprop +=' L '+str(pieces[pn][2].x)+','+str(pieces[pn][2].y)
                    cpt1 = inkex.paths.Move(pieces[pn][2].x, pieces[pn][2].y)
                    cpt2 = inkex.paths.Move(pieces[pn][3].x, pieces[pn][3].y)
