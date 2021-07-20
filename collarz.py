@@ -28,11 +28,16 @@ import inkex
 import math
 import copy
 
+from inkex import PathElement, Style
+from inkex.paths import Move, Line, ZoneClose, Path
+from inkex.elements._groups import Group
+
 class pathStruct(object):
     def __init__(self):
         self.id="path0000"
-        self.path=[]
+        self.path=Path()
         self.enclosed=False
+        self.style = None
     def __str__(self):
         return self.path
     
@@ -90,26 +95,25 @@ class Collar(inkex.EffectExtension):
     def drawline(self, dstr, name, parent, sstr=None):
         line_style   = {'stroke':'#000000','stroke-width':'0.25','fill':'#eeeeee'}
         if sstr == None:
-            stylestr = str(inkex.Style(line_style))
+            stylestr = str(Style(line_style))
         else:
             stylestr = sstr
-        el = parent.add(inkex.PathElement())
+        el = parent.add(PathElement())
         el.path = dstr
         el.style = stylestr
         el.label = name
         
     def makepoly(self, toplength, numpoly):
       r = toplength/(2*math.sin(math.pi/numpoly))
-      pstr = ''
+      pstr = Path()
       for ppoint in range(0,numpoly):
          xn = r*math.cos(2*math.pi*ppoint/numpoly)
          yn = r*math.sin(2*math.pi*ppoint/numpoly)
          if ppoint == 0:
-            pstr = 'M '
+            pstr.append(Move(xn,yn))
          else:
-            pstr += ' L '
-         pstr += str(xn) + ',' + str(yn)
-      pstr = pstr + ' Z'
+            pstr.append(Line(xn,yn))
+      pstr.append(ZoneClose())
       return pstr
 
     # Thanks to Gabriel Eng for his python implementation of https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
@@ -122,20 +126,25 @@ class Collar(inkex.EffectExtension):
         point = pnPoint((p.x, p.y))
         pverts = []
         for pnum in path:
-            pverts.append((pnum.x, pnum.y))
+            if pnum.letter == 'Z':
+                pverts.append((path[0].x, path[0].y))
+            else:
+                pverts.append((pnum.x, pnum.y))
         isInside = point.InPolygon(pverts, True)
         return isInside # True if point p is inside path
 
     def makescore(self, pt1, pt2, dashlength):
         # Draws a dashed line of dashlength between two points
-        # Dash = dashlength (in inches) space followed by dashlength mark
+        # Dash = dashlength space followed by dashlength mark
         # if dashlength is zero, we want a solid line
-        apt1 = inkex.paths.Line(0.0,0.0)
-        apt2 = inkex.paths.Line(0.0,0.0)
-        ddash = ''
+        # Returns dashed line as a Path object
+        apt1 = Line(0.0,0.0)
+        apt2 = Line(0.0,0.0)
+        ddash = Path()
         if math.isclose(dashlength, 0.0):
             #inkex.utils.debug("Draw solid dashline")
-            ddash = ' M '+str(pt1.x)+','+str(pt1.y)+' L '+str(pt2.x)+','+str(pt2.y)
+            ddash.append(Move(pt1.x,pt1.y))
+            ddash.append(Line(pt2.x,pt2.y))
         else:
             if math.isclose(pt1.y, pt2.y):
                 #inkex.utils.debug("Draw horizontal dashline")
@@ -147,14 +156,13 @@ class Collar(inkex.EffectExtension):
                     xcushion = pt1.x - dashlength
                     xpt = pt2.x
                     ypt = pt2.y
-                ddash = ''
                 done = False
                 while not(done):
                     if (xpt + dashlength*2) <= xcushion:
                         xpt = xpt + dashlength
-                        ddash = ddash + ' M ' + str(xpt) + ',' + str(ypt)
+                        ddash.append(Move(xpt,ypt))
                         xpt = xpt + dashlength
-                        ddash = ddash + ' L ' + str(xpt) + ',' + str(ypt)
+                        ddash.append(Line(xpt,ypt))
                     else:
                         done = True
             elif math.isclose(pt1.x, pt2.x):
@@ -167,14 +175,13 @@ class Collar(inkex.EffectExtension):
                     ycushion = pt1.y - dashlength
                     xpt = pt2.x
                     ypt = pt2.y
-                ddash = ''
                 done = False
                 while not(done):
                     if(ypt + dashlength*2) <= ycushion:
                         ypt = ypt + dashlength         
-                        ddash = ddash + ' M ' + str(xpt) + ',' + str(ypt)
+                        ddash.append(Move(xpt,ypt))
                         ypt = ypt + dashlength
-                        ddash = ddash + ' L ' + str(xpt) + ',' + str(ypt)
+                        ddash.append(Line(xpt,ypt))
                     else:
                         done = True
             else:
@@ -194,7 +201,6 @@ class Collar(inkex.EffectExtension):
                 msign = (m>0) - (m<0)
                 ycushion = apt2.y + dashlength*math.sin(theta)
                 xcushion = apt2.x + msign*dashlength*math.cos(theta)
-                ddash = ''
                 xpt = apt1.x
                 ypt = apt1.y
                 done = False
@@ -205,11 +211,11 @@ class Collar(inkex.EffectExtension):
                         # move to end of space / beginning of mark
                         xpt = xpt - msign*dashlength*math.cos(theta)
                         ypt = ypt - msign*dashlength*math.sin(theta)
-                        ddash = ddash + ' M ' + str(xpt) + ',' + str(ypt)
+                        ddash.append(Move(xpt,ypt))
                         # draw the mark
                         xpt = xpt - msign*dashlength*math.cos(theta)
                         ypt = ypt - msign*dashlength*math.sin(theta)
-                        ddash = ddash + ' L ' + str(xpt) + ',' + str(ypt)
+                        ddash.append(Line(xpt,ypt))
                     else:
                         done = True
         return ddash
@@ -230,9 +236,9 @@ class Collar(inkex.EffectExtension):
         # pt1, pt2 - the two points where the tab will be inserted
         # tabht - the height of the tab
         # taba - the angle of the tab sides
-        # returns the two tab points in order of closest to pt1
-        tpt1 = inkex.paths.Line(0.0,0.0)
-        tpt2 = inkex.paths.Line(0.0,0.0)
+        # returns the two tab points (Line objects) in order of closest to pt1
+        tpt1 = Line(0.0,0.0)
+        tpt2 = Line(0.0,0.0)
         currTabHt = tabht
         currTabAngle = taba
         testAngle = 1.0
@@ -248,8 +254,8 @@ class Collar(inkex.EffectExtension):
                     tpt2.x = pt2.x + testHt
                     tpt1.y = pt1.y + testHt/math.tan(math.radians(testAngle))
                     tpt2.y = pt2.y - testHt/math.tan(math.radians(testAngle))
-                    pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                    pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                    pnpt1 = Move(tpt1.x, tpt1.y)
+                    pnpt2 = Move(tpt2.x, tpt2.y)
                     if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                        (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                         tpt1.x = pt1.x - currTabHt
@@ -264,8 +270,8 @@ class Collar(inkex.EffectExtension):
                     tpt2.x = pt2.x + testHt
                     tpt1.y = pt1.y - testHt/math.tan(math.radians(testAngle))
                     tpt2.y = pt2.y + testHt/math.tan(math.radians(testAngle))
-                    pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                    pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                    pnpt1 = Move(tpt1.x, tpt1.y)
+                    pnpt2 = Move(tpt2.x, tpt2.y)
                     if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                        (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                         tpt1.x = pt1.x - currTabHt
@@ -282,8 +288,8 @@ class Collar(inkex.EffectExtension):
                     tpt2.y = pt2.y - testHt
                     tpt1.x = pt1.x + testHt/math.tan(math.radians(testAngle))
                     tpt2.x = pt2.x - testHt/math.tan(math.radians(testAngle))
-                    pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                    pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                    pnpt1 = Move(tpt1.x, tpt1.y)
+                    pnpt2 = Move(tpt2.x, tpt2.y)
                     if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                        (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                         tpt1.y = pt1.y + currTabHt
@@ -298,8 +304,8 @@ class Collar(inkex.EffectExtension):
                     tpt2.y = pt2.y - testHt
                     tpt1.x = pt1.x - testHt/math.tan(math.radians(testAngle))
                     tpt2.x = pt2.x + testHt/math.tan(math.radians(testAngle))
-                    pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                    pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                    pnpt1 = Move(tpt1.x, tpt1.y)
+                    pnpt2 = Move(tpt2.x, tpt2.y)
                     if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                        (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                         tpt1.y = pt1.y + currTabHt
@@ -325,20 +331,16 @@ class Collar(inkex.EffectExtension):
                         tpt2.y = pt2.y - testHt
                         tpt1.x = pt1.x + testHt/math.tan(math.radians(testAngle))
                         tpt2.x = pt2.x - testHt/math.tan(math.radians(testAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
                         tpt2.y = thetal2[1].y
-                        pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                        pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                        pnpt1 = Move(tpt1.x, tpt1.y)
+                        pnpt2 = Move(tpt2.x, tpt2.y)
                         if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                            (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                             tpt1.y = pt1.y + currTabHt
@@ -348,14 +350,10 @@ class Collar(inkex.EffectExtension):
                             tpt2.y = pt2.y - currTabHt
                         tpt1.x = pt1.x + currTabHt/math.tan(math.radians(currTabAngle))
                         tpt2.x = pt2.x - currTabHt/math.tan(math.radians(currTabAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
@@ -365,20 +363,16 @@ class Collar(inkex.EffectExtension):
                         tpt2.y = pt2.y - testHt
                         tpt1.x = pt1.x - testHt/math.tan(math.radians(testAngle))
                         tpt2.x = pt2.x + testHt/math.tan(math.radians(testAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
                         tpt2.y = thetal2[1].y
-                        pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                        pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                        pnpt1 = Move(tpt1.x, tpt1.y)
+                        pnpt2 = Move(tpt2.x, tpt2.y)
                         if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                            (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                             tpt1.y = pt1.y + currTabHt
@@ -388,14 +382,10 @@ class Collar(inkex.EffectExtension):
                             tpt2.y = pt2.y - currTabHt
                         tpt1.x = pt1.x - currTabHt/math.tan(math.radians(currTabAngle))
                         tpt2.x = pt2.x + currTabHt/math.tan(math.radians(currTabAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
@@ -406,20 +396,16 @@ class Collar(inkex.EffectExtension):
                         tpt2.y = pt2.y - testHt
                         tpt1.x = pt1.x + testHt/math.tan(math.radians(testAngle))
                         tpt2.x = pt2.x - testHt/math.tan(math.radians(testAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
                         tpt2.y = thetal2[1].y
-                        pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                        pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                        pnpt1 = Move(tpt1.x, tpt1.y)
+                        pnpt2 = Move(tpt2.x, tpt2.y)
                         if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                            (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                             tpt1.y = pt1.y + currTabHt
@@ -429,14 +415,10 @@ class Collar(inkex.EffectExtension):
                             tpt2.y = pt2.y - currTabHt
                         tpt1.x = pt1.x + currTabHt/math.tan(math.radians(currTabAngle))
                         tpt2.x = pt2.x - currTabHt/math.tan(math.radians(currTabAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
@@ -446,20 +428,16 @@ class Collar(inkex.EffectExtension):
                         tpt2.y = pt2.y - testHt
                         tpt1.x = pt1.x - testHt/math.tan(math.radians(testAngle))
                         tpt2.x = pt2.x + testHt/math.tan(math.radians(testAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
                         tpt2.y = thetal2[1].y
-                        pnpt1 = inkex.paths.Move(tpt1.x, tpt1.y)
-                        pnpt2 = inkex.paths.Move(tpt2.x, tpt2.y)
+                        pnpt1 = Move(tpt1.x, tpt1.y)
+                        pnpt2 = Move(tpt2.x, tpt2.y)
                         if ((not tpath.enclosed) and (self.insidePath(tpath.path, pnpt1) or self.insidePath(tpath.path, pnpt2))) or \
                            (tpath.enclosed and ((not self.insidePath(tpath.path, pnpt1)) and (not self.insidePath(tpath.path, pnpt2)))):
                             tpt1.y = pt1.y + currTabHt
@@ -469,14 +447,10 @@ class Collar(inkex.EffectExtension):
                             tpt2.y = pt2.y - currTabHt
                         tpt1.x = pt1.x - currTabHt/math.tan(math.radians(currTabAngle))
                         tpt2.x = pt2.x + currTabHt/math.tan(math.radians(currTabAngle))
-                        tl1 = [('M', [pt1.x,pt1.y])]
-                        tl1 += [('L', [tpt1.x, tpt1.y])]
-                        ele1 = inkex.Path(tl1)
-                        tl2 = [('M', [pt1.x,pt1.y])]
-                        tl2 += [('L', [tpt2.x, tpt2.y])]
-                        ele2 = inkex.Path(tl2)
-                        thetal1 = ele1.rotate(theta, [pt1.x,pt1.y])
-                        thetal2 = ele2.rotate(theta, [pt2.x,pt2.y])
+                        t11 = Path([Move(pt1.x,pt1.y),Line(tpt1.x, tpt1.y)])
+                        t12 = Path([Move(pt1.x,pt1.y),Line(tpt2.x, tpt2.y)])
+                        thetal1 = t11.rotate(theta, [pt1.x,pt1.y])
+                        thetal2 = t12.rotate(theta, [pt2.x,pt2.y])
                         tpt1.x = thetal1[1].x
                         tpt1.y = thetal1[1].y
                         tpt2.x = thetal2[1].x
@@ -534,9 +508,13 @@ class Collar(inkex.EffectExtension):
              # First time through, init the storage areas
              pieces = []
              nodes = []
-             nd = []
+             nd = Path()
              for i in range(4):
-                nd.append(inkex.paths.Line(0.0,0.0))
+                 if i == 0:
+                     nd.append(Move(0.0,0.0))
+                 else:
+                     nd.append(Line(0.0,0.0))
+             nd.append(ZoneClose())
           else:
              # Second time through, empty the storage areas
              i = 0
@@ -556,7 +534,8 @@ class Collar(inkex.EffectExtension):
                 i = i + 1
           for pn in range(polysides):
              nodes.clear()
-             #what we need here is to skip the rotatation and just move the x and y if there is no difference between the polygon sizes.
+             #what we need here is to skip the rotatation and just move
+             # the x and y if there is no difference between the polygon sizes.
              #Added by Sue to handle equal polygons
              if poly1size == poly2size:
                 nd[0].x =  pn * w1
@@ -583,29 +562,16 @@ class Collar(inkex.EffectExtension):
                    Q2 = math.degrees(math.atan((nd[0].y - oy)/(w1/2 - ox)))
                    Q1 = 90 - Q2
                 else:
-                   dl = ''
-                   for j in range(4):
-                        if j == 0:
-                           dl += 'M '
-                        else:
-                           dl += ' L '
-                        dl += str(nd[j].x) + ',' + str(nd[j].y)
-                   dl += ' Z'
-                   p1 = inkex.paths.Path(path_d=dl)
-                   p2 = p1.rotate(-2*Q1, (ox,oy))
-                   for j in range(4):
-                      nd[j].x = p2[j].x
-                      nd[j].y = p2[j].y
+                   nd.rotate(-2*Q1, (ox,oy), inplace=True)
              for i in range(4):
                 nodes.append(copy.deepcopy(nd[i]))
              pieces.append(copy.deepcopy(nodes))
-          dscores = []
           if done == 0:
-             wpath = pathStruct() # We'll need this for makeTab
-             wpath.id = "c1"
              for pc in range(partcnt):
-                dwrap = '' # Create the wrapper
-                dscores.clear()
+                # Create the wrapper
+                wpath = pathStruct() # We'll need this structure for makeTab
+                wpath.id = "c1"
+                dscores = Path()
                 sidecnt = math.ceil(polysides/partcnt)
                 if pc == partcnt - 1:
                    # Last time through creates the remainder of the pieces
@@ -615,55 +581,42 @@ class Collar(inkex.EffectExtension):
                 for pn in range(startpc, endpc):
                    # First half
                    if(pn == startpc):
-                      ppt0 = inkex.paths.Move(pieces[pn][0].x,pieces[pn][0].y)
-                      dwrap +='M '+str(ppt0.x)+','+str(ppt0.y)
+                      ppt0 = Move(pieces[pn][0].x,pieces[pn][0].y)
                       # We're also creating wpath for later use in creating the model
                       wpath.path.append(ppt0)
-                   ppt1 = inkex.paths.Line(pieces[pn][1].x,pieces[pn][1].y)
-                   dwrap +=' L '+str(ppt1.x)+','+str(ppt1.y)
+                   ppt1 = Line(pieces[pn][1].x,pieces[pn][1].y)
                    wpath.path.append(ppt1)
                    if pn < endpc - 1:
                       # Put scorelines across the collar
-                      ppt2 = inkex.paths.Line(pieces[pn][2].x,pieces[pn][2].y)
+                      ppt2 = Line(pieces[pn][2].x,pieces[pn][2].y)
                       spaths = self.makescore(ppt1, ppt2,dashlength)
-                      dscores.append(spaths)
+                      dscores += spaths
                 for pn in range(endpc-1, startpc-1, -1):
                    # Second half
                    if(pn == (endpc-1)):
-                      ppt2 = inkex.paths.Line(pieces[pn][2].x,pieces[pn][2].y)
-                      dwrap +=' L '+str(pieces[pn][2].x)+','+str(pieces[pn][2].y)
-                      wpath.path.append(inkex.paths.Line(pieces[pn][2].x,pieces[pn][2].y))
-                   ppt3 = inkex.paths.Line(pieces[pn][3].x,pieces[pn][3].y)
-                   dwrap +=' L '+str(ppt3.x)+','+str(ppt3.y)
-                   wpath.path.append(inkex.paths.Line(pieces[pn][3].x,pieces[pn][3].y))
-                dwrap +=' Z' # Close off the wrapper's path
-                wpath.path.append(ppt0)
+                      ppt2 = Line(pieces[pn][2].x,pieces[pn][2].y)
+                      wpath.path.append(ppt2)
+                   ppt3 = Line(pieces[pn][3].x,pieces[pn][3].y)
+                   wpath.path.append(ppt3)
+                wpath.path.append(ZoneClose())
+                wpaths.append(copy.deepcopy(wpath)) # Hold onto the path for the next step
                 if math.isclose(dashlength, 0.0):
-                   # lump together all the score lines
-                   dscore = ''
-                   for dndx in range(len(dscores)):
-                      if dndx == 0:
-                         dscore = dscores[dndx][1:]
-                      else:
-                         dscore += dscores[dndx]
-                   group = inkex.elements._groups.Group()
-                   group.label = 'group'+str(pc)+'ws'
-                   self.drawline(dwrap,'wrapper'+str(pc),group,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
-                   self.drawline(dscore,'score'+str(pc)+'w',group,sstr=None) # Output the scorelines separately
-                   layer.append(group)
+                    group = Group()
+                    group.label = 'group'+str(pc)+'ws'
+                    self.drawline(str(wpath.path),'wrapper'+str(pc),group,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
+                    self.drawline(str(dscores),'score'+str(pc)+'w',group,sstr=None) # Output the scorelines separately
+                    layer.append(group)
                 else:
-                   # lump together all the score lines with the model
-                   for dndx in dscores:
-                      dwrap = dwrap + dndx
-                   self.drawline(dwrap,'wrapper'+str(pc),layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
-                wpaths.append(copy.deepcopy(wpath))
-                wpath.path.clear()
+                    wpath.path += dscores # Output scorelines with wrapper
+                    self.drawline(str(wpath.path),'wrapper'+str(pc),layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
+                while len(wpath.path) > 0:
+                    del wpath.path[0]
              done = 1
           else:
              # Create the model
              for pc in range(partcnt):
-                dprop = ''
-                dscores.clear()
+                dprop = Path()
+                dscores = Path()
                 sidecnt = math.ceil(polysides/partcnt)
                 if pc == partcnt - 1:
                    sidecnt = polysides - math.ceil(polysides/partcnt)*pc
@@ -672,13 +625,13 @@ class Collar(inkex.EffectExtension):
                 for pn in range(startpc, endpc):
                    # First half
                    if pn == startpc:
-                      dprop = 'M '+str(pieces[pn][0].x)+','+str(pieces[pn][0].y)
-                   cpt1 = inkex.paths.Move(pieces[pn][0].x, pieces[pn][0].y)
-                   cpt2 = inkex.paths.Move(pieces[pn][1].x, pieces[pn][1].y)
+                      dprop.append(Move(pieces[pn][0].x,pieces[pn][0].y))
+                   cpt1 = Move(pieces[pn][0].x, pieces[pn][0].y)
+                   cpt2 = Move(pieces[pn][1].x, pieces[pn][1].y)
                    tabpt1, tabpt2 = self.makeTab(wpaths[pc], cpt1, cpt2, tab_height, tab_angle)
-                   dprop +=' L '+str(tabpt1.x)+','+str(tabpt1.y)
-                   dprop +=' L '+str(tabpt2.x)+','+str(tabpt2.y)
-                   dprop += ' L '+str(pieces[pn][1].x)+','+str(pieces[pn][1].y)
+                   dprop.append(tabpt1)
+                   dprop.append(tabpt2)
+                   dprop.append(Line(pieces[pn][1].x,pieces[pn][1].y))
                    # As long as we're here, create a scoreline along the tab...
                    spaths = self.makescore(pieces[pn][0], pieces[pn][1],dashlength)
                    dscores.append(spaths)
@@ -689,49 +642,40 @@ class Collar(inkex.EffectExtension):
                    # Second half
                    if(pn == (endpc-1)):
                       # Since we're starting on the last piece, put a tab on the end of it, too
-                      cpt1 = inkex.paths.Move(pieces[pn][1].x, pieces[pn][1].y)
-                      cpt2 = inkex.paths.Move(pieces[pn][2].x, pieces[pn][2].y)
+                      cpt1 = Move(pieces[pn][1].x, pieces[pn][1].y)
+                      cpt2 = Move(pieces[pn][2].x, pieces[pn][2].y)
                       tabpt1, tabpt2 = self.makeTab(wpaths[pc], cpt1, cpt2, tab_height, tab_angle)
-                      dprop +=' L '+str(tabpt1.x)+','+str(tabpt1.y)
-                      dprop +=' L '+str(tabpt2.x)+','+str(tabpt2.y)
+                      dprop.append(tabpt1)
+                      dprop.append(tabpt2)
                       # Create a scoreline along the tab
                       #spaths = self.makescore(pieces[pn][1], pieces[pn][2],dashlength)
                       #dscores.append(spaths)
-                   dprop +=' L '+str(pieces[pn][2].x)+','+str(pieces[pn][2].y)
-                   cpt1 = inkex.paths.Move(pieces[pn][2].x, pieces[pn][2].y)
-                   cpt2 = inkex.paths.Move(pieces[pn][3].x, pieces[pn][3].y)
+                   dprop.append(Line(pieces[pn][2].x,pieces[pn][2].y))
+                   cpt1 = Move(pieces[pn][2].x, pieces[pn][2].y)
+                   cpt2 = Move(pieces[pn][3].x, pieces[pn][3].y)
                    tabpt1, tabpt2 = self.makeTab(wpaths[pc], cpt1, cpt2, polysmalltabht, tab_angle)
-                   dprop +=' L '+str(tabpt1.x)+','+str(tabpt1.y)
-                   dprop +=' L '+str(tabpt2.x)+','+str(tabpt2.y)
-                   dprop += ' L '+str(pieces[pn][3].x)+','+str(pieces[pn][3].y)
+                   dprop.append(tabpt1)
+                   dprop.append(tabpt2)
+                   dprop.append(Line(pieces[pn][3].x,pieces[pn][3].y))
                    # Create a scoreline along the tab
                    spaths = self.makescore(pieces[pn][2], pieces[pn][3],dashlength)
                    dscores.append(spaths)
-                dprop += ' Z' # Close off the model's path
+                dprop.append(ZoneClose())
                 if math.isclose(dashlength, 0.0):
-                   # lump together all the score lines
-                   dscore = ''
-                   for dndx in range(len(dscores)):
-                      if dndx == 0:
-                         dscore = dscores[dndx][1:]
-                      else:
-                         dscore += dscores[dndx]
-                   group = inkex.elements._groups.Group()
+                   group = Group()
                    group.label = 'group'+str(pc)+'ms'
-                   self.drawline(dprop,'model'+str(pc),group,sstr=None) # Output the model
-                   self.drawline(dscore,'score'+str(pc)+'m',group,sstr=None) # Output the scorelines separately
+                   self.drawline(str(dprop),'model'+str(pc),group,sstr=None) # Output the model
+                   self.drawline(str(dscores),'score'+str(pc)+'m',group,sstr=None) # Output the scorelines separately
                    layer.append(group)
                 else:
                    # lump together all the score lines with the model
-                   for dndx in dscores:
-                      dprop = dprop + dndx
+                   dprop += dscores
                    self.drawline(dprop,'model'+str(pc),layer,sstr=None) # Output the model
 
              # At this point, we can generate the top and bottom polygons
              # r = sidelength/(2*sin(PI/numpoly))
-             self.drawline(self.makepoly(w1, polysides),'biglid',layer,sstr=None) # Output the bigger polygon
-             sp = self.makepoly(w2, polysides)
-             self.drawline(sp,'smalllid',layer,sstr=None) # Output the smaller polygon
+             self.drawline(str(self.makepoly(w1, polysides)),'biglid',layer,sstr=None) # Output the bigger polygon
+             self.drawline(str(self.makepoly(w2, polysides)),'smalllid',layer,sstr=None) # Output the smaller polygon
              done = 2
 
 if __name__ == '__main__':
