@@ -88,6 +88,8 @@ class Collar(inkex.EffectExtension):
             help="Length of dashline in dimensional units (zero for solid line)")
         pars.add_argument("--tabangle", type=float, default=45.0,\
             help="Angle of tab edges in degrees")
+        pars.add_argument("--linesonwrapper", type=inkex.Boolean, dest="linesonwrapper",\
+            help="Put dashlines on wrappers")
         pars.add_argument("--tabheight", type=float, default=0.4,\
             help="Height of tab in dimensional units")
 
@@ -371,6 +373,7 @@ class Collar(inkex.EffectExtension):
         tab_angle = float(self.options.tabangle)
         tab_height = float(self.options.tabheight) * scale
         dashlength = float(self.options.dashlength) * scale
+        lines_on_wrapper = self.options.linesonwrapper
         polylarge = max(poly1size, poly2size) # Larger of the two polygons
         polysmall = min(poly1size, poly2size) # Smaller of the two polygons
         polysmallR = polysmall/2
@@ -483,13 +486,17 @@ class Collar(inkex.EffectExtension):
                 wpath.path.append(ZoneClose())
                 wpaths.append(copy.deepcopy(wpath)) # Hold onto the path for the next step
                 if math.isclose(dashlength, 0.0):
-                    group = Group()
-                    group.label = 'group'+str(pc)+'ws'
-                    self.drawline(str(wpath.path),'wrapper'+str(pc),group,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
-                    self.drawline(str(dscores),'score'+str(pc)+'w',group,sstr=None) # Output the scorelines separately
-                    layer.append(group)
+                    if lines_on_wrapper:
+                        group = Group()
+                        group.label = 'group'+str(pc)+'ws'
+                        self.drawline(str(wpath.path),'wrapper'+str(pc),group,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
+                        self.drawline(str(dscores),'wscore'+str(pc)+'w',group,sstr=None) # Output the scorelines separately
+                        layer.append(group)
+                    else:
+                        self.drawline(str(wpath.path),'wrapper'+str(pc),layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
                 else:
-                    wpath.path += dscores # Output scorelines with wrapper
+                    if lines_on_wrapper:
+                        wpath.path += dscores # Output scorelines with wrapper
                     self.drawline(str(wpath.path),'wrapper'+str(pc),layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
                 while len(wpath.path) > 0:
                     del wpath.path[0]
