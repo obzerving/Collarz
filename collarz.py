@@ -82,6 +82,8 @@ class Collar(inkex.EffectExtension):
             help="Size of Polygon 2 in dimensional units")
         pars.add_argument("--collarheight", type=float, default=2.0,\
             help="Height of collar in dimensional units")
+        pars.add_argument("--polylimit", type=int, default=0,\
+            help="Number of parts to divide collar into")
         pars.add_argument("--collarparts", type=int, default=1,\
             help="Number of parts to divide collar into")
         pars.add_argument("--dashlength", type=float, default=0.1,\
@@ -90,6 +92,8 @@ class Collar(inkex.EffectExtension):
             help="Angle of tab edges in degrees")
         pars.add_argument("--linesonwrapper", type=inkex.Boolean, dest="linesonwrapper",\
             help="Put dashlines on wrappers")
+        pars.add_argument("--circumscribed", type=inkex.Boolean, dest="circumscribed",\
+            help="Use circumscribed diameter")
         pars.add_argument("--tabheight", type=float, default=0.4,\
             help="Height of tab in dimensional units")
 
@@ -105,10 +109,10 @@ class Collar(inkex.EffectExtension):
         el.style = stylestr
         el.label = name
         
-    def makepoly(self, toplength, numpoly):
+    def makepoly(self, toplength, numpoly,polylimit):
       r = toplength/(2*math.sin(math.pi/numpoly))
       pstr = Path()
-      for ppoint in range(0,numpoly):
+      for ppoint in range(0,polylimit):
          xn = r*math.cos(2*math.pi*ppoint/numpoly)
          yn = r*math.sin(2*math.pi*ppoint/numpoly)
          if ppoint == 0:
@@ -361,6 +365,103 @@ class Collar(inkex.EffectExtension):
                 tabDone = True
             
         return tpt1,tpt2
+        
+        
+    def makeback(self, toplength,botlength,numpoly,polylimit,collarht,tab_height,tab_angle,dashlength):
+    #SUE CHANGE -- This function makes the piece for the back for when it is an incomplete polygon
+      r = toplength/(2*math.sin(math.pi/numpoly))
+      r2 = botlength/(2*math.sin(math.pi/numpoly))
+
+      layer = self.svg.get_current_layer()
+      pdstr = pathStruct()
+      
+      pdstr2 = Path()
+      spaths = ""
+
+      
+      for ppoint in range(0,polylimit):
+         xn = r*math.cos(2*math.pi*ppoint/numpoly)  #bigger poly
+         yn = r*math.sin(2*math.pi*ppoint/numpoly)
+         xnb = r2*math.cos(2*math.pi*ppoint/numpoly) #smaller poly
+         ynb= r2*math.sin(2*math.pi*ppoint/numpoly)
+
+         if ppoint == 0:
+            #just save the first calculated points
+            dxt1 = xn #larger x
+            dyt1 = yn #larger y 
+            dxb1 = xnb #smaller x
+            dyb1= ynb  #smaller y
+
+      # save the last points
+      dxt2 = xn #these will keep getting replaced with the last calculated points
+      dyt2 = yn
+      dxb2 = xnb
+      dyb2 = ynb
+      #calculate the lengths between the first and last constructed nodes for top and bottom            
+      diaglent = math.sqrt( (max(dxt2,dxt1)- min(dxt2,dxt1))**2 + (max(dyt2,dyt1)- min(dyt2,dyt1))**2) #length of larger diagonal
+      diaglenb = math.sqrt( (max(dxb2,dxb1)- min(dxb2,dxb1))**2 + (max(dyb2,dyb1)- min(dyb2,dyb1))**2) #length of smaller diagonal
+      dhalfleft = (diaglent - diaglenb)/2  #half the difference of the two diagonals
+      dhalfright = diaglent-dhalfleft
+
+      #Now build a string with the points  
+      pdstr.path.append(Move(0,0))
+      
+      pdstr.path.append(Line(diaglent,0))
+      
+      pdstr.path.append(Line(dhalfright,collarht))
+      
+      pdstr.path.append(Line(dhalfleft,collarht))  
+      
+      pdstr.path.append(ZoneClose())
+      
+      pdstr2.append(pdstr.path[0])
+
+      #SUE added to make a wrapper for back
+      self.drawline(str(pdstr.path),'backw',layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") #output the back piece  
+      #####
+      
+      point1,point2 = self.makeTab(pdstr,pdstr.path[0],pdstr.path[1],tab_height,tab_angle)
+      pdstr2.append(point1)
+      pdstr2.append(point2)
+      pdstr2.append(pdstr.path[1])
+      pdstr2.append(pdstr.path[2])
+      
+      point1,point2 = self.makeTab(pdstr,pdstr.path[2],pdstr.path[3],tab_height,tab_angle)
+      pdstr2.append(point1)
+      pdstr2.append(point2)
+      pdstr2.append(pdstr.path[3])
+      
+      point1,point2 = self.makeTab(pdstr,pdstr.path[3],pdstr.path[0],tab_height,tab_angle)
+      pdstr2.append(point1)
+      pdstr2.append(point2)
+      #pdstr2.append(pdstr.path[0])
+      
+      pdstr2.append(ZoneClose())
+      
+     
+      scorepath = Path()
+
+      spaths = self.makescore(pdstr.path[0],pdstr.path[1],dashlength)
+      
+      scorepath.append(spaths)
+      spaths = self.makescore(pdstr.path[2],pdstr.path[3],dashlength)
+      scorepath.append(spaths)
+      spaths = self.makescore(pdstr.path[3],pdstr.path[0],dashlength)
+      scorepath.append(spaths)
+      #put solid score lines into group with back piece
+      if math.isclose(dashlength, 0.0):
+        bgroup = Group()
+        bgroup.label = 'group'+'back'
+        self.drawline(str(pdstr2),'back',   bgroup,sstr="fill:#eeeeee;stroke:#000000;stroke-width:0.25") # Output the shape
+
+        self.drawline(str(scorepath), 'bkscore',bgroup,sstr="fill:None;stroke:#000000;stroke-width:0.25") # Output the scorelines separately
+        layer.append(bgroup)
+      
+      else:
+         pdstr2 += scorepath
+         self.drawline(str(pdstr2),'backing',layer,sstr=None) #output the back piece      
+      return 
+
 
     def effect(self):
         layer = self.svg.get_current_layer()
@@ -368,12 +469,17 @@ class Collar(inkex.EffectExtension):
         polysides = int(self.options.polysides)
         poly1size = float(self.options.poly1size) * scale
         poly2size = float(self.options.poly2size) * scale
+        polylimit = int(self.options.polylimit)
         collarht = float(self.options.collarheight) * scale
         partcnt = int(self.options.collarparts)
         tab_angle = float(self.options.tabangle)
         tab_height = float(self.options.tabheight) * scale
         dashlength = float(self.options.dashlength) * scale
         lines_on_wrapper = self.options.linesonwrapper
+        circumscribed = self.options.circumscribed
+        if not circumscribed:
+            poly1size = poly1size/math.cos(math.pi/polysides)
+            poly2size = poly2size/math.cos(math.pi/polysides)
         polylarge = max(poly1size, poly2size) # Larger of the two polygons
         polysmall = min(poly1size, poly2size) # Smaller of the two polygons
         polysmallR = polysmall/2
@@ -381,6 +487,8 @@ class Collar(inkex.EffectExtension):
         polysmalltabht = tab_height
         if polysmallr < polysmalltabht:
            polysmalltabht = polysmallr
+        if polylimit <=1 or polylimit > polysides :
+           polylimit = polysides
         wpaths = []
         done = 0
         # We go through this loop twice
@@ -403,7 +511,8 @@ class Collar(inkex.EffectExtension):
           else:
              # Second time through, empty the storage areas
              i = 0
-             while i < polysides:
+             #SUECHANGE
+             while i < polylimit:
                 j = 0
                 while j < 4:
                    del pieces[i][0]
@@ -417,7 +526,8 @@ class Collar(inkex.EffectExtension):
              while i < 4:
                 del nodes[0]
                 i = i + 1
-          for pn in range(polysides):
+          #SUECHANGE
+          for pn in range(polylimit):
              nodes.clear()
              #what we need here is to skip the rotatation and just move
              # the x and y if there is no difference between the polygon sizes.
@@ -460,7 +570,8 @@ class Collar(inkex.EffectExtension):
                 sidecnt = math.ceil(polysides/partcnt)
                 if pc == partcnt - 1:
                    # Last time through creates the remainder of the pieces
-                   sidecnt = polysides - math.ceil(polysides/partcnt)*pc
+                   #SUECHANGE
+                   sidecnt = polylimit - math.ceil(polysides/partcnt)*pc
                 startpc = pc*math.ceil(polysides/partcnt)
                 endpc = startpc + sidecnt
                 for pn in range(startpc, endpc):
@@ -506,10 +617,13 @@ class Collar(inkex.EffectExtension):
              for pc in range(partcnt):
                 dprop = Path()
                 dscores = Path()
-                sidecnt = math.ceil(polysides/partcnt)
+                #SUECHANGE
+                sidecnt = math.ceil(polylimit/partcnt)
                 if pc == partcnt - 1:
-                   sidecnt = polysides - math.ceil(polysides/partcnt)*pc
-                startpc = pc*math.ceil(polysides/partcnt)
+                   #SUECHANGE
+                   sidecnt = polylimit- math.ceil(polylimit/partcnt)*pc
+                #SUECHANGE
+                startpc = pc*math.ceil(polylimit/partcnt)
                 endpc = startpc + sidecnt
                 for pn in range(startpc, endpc):
                    # First half
@@ -563,8 +677,15 @@ class Collar(inkex.EffectExtension):
 
              # At this point, we can generate the top and bottom polygons
              # r = sidelength/(2*sin(PI/numpoly))
-             self.drawline(str(self.makepoly(w1, polysides)),'biglid',layer,sstr=None) # Output the bigger polygon
-             self.drawline(str(self.makepoly(w2, polysides)),'smalllid',layer,sstr=None) # Output the smaller polygon
+             #SUECHANGE 2 lines
+             if polylimit<polysides:
+                polylimit2 = polylimit+1
+             else:
+                polylimit2 = polylimit
+             self.drawline(str(self.makepoly(w1, polysides,polylimit2)),'biglid',layer,sstr=None) # Output the bigger polygon
+             self.drawline(str(self.makepoly(w2, polysides,polylimit2)),'smalllid',layer,sstr=None) # Output the smaller polygon
+             if (polysides > polylimit):
+                 self.makeback(w1,w2, polysides,polylimit2,collarht,tab_height,tab_angle,dashlength)   #output the back piece
              done = 2
 
 if __name__ == '__main__':
