@@ -82,8 +82,10 @@ class Collar(inkex.EffectExtension):
             help="Size of Polygon 2 in dimensional units")
         pars.add_argument("--collarheight", type=float, default=2.0,\
             help="Height of collar in dimensional units")
-        pars.add_argument("--polylimit", type=int, default=0,\
-            help="Number of parts to divide collar into")
+            
+        pars.add_argument("--halfpoly", type=inkex.Boolean, default=0,\
+            help="Make only half the poly shape (if even number of sides)")
+            
         pars.add_argument("--collarparts", type=int, default=1,\
             help="Number of parts to divide collar into")
         pars.add_argument("--dashlength", type=float, default=0.1,\
@@ -469,7 +471,8 @@ class Collar(inkex.EffectExtension):
         polysides = int(self.options.polysides)
         poly1size = float(self.options.poly1size) * scale
         poly2size = float(self.options.poly2size) * scale
-        polylimit = int(self.options.polylimit)
+        halfpoly = self.options.halfpoly
+        polylimit = polysides
         collarht = float(self.options.collarheight) * scale
         partcnt = int(self.options.collarparts)
         tab_angle = float(self.options.tabangle)
@@ -485,10 +488,12 @@ class Collar(inkex.EffectExtension):
         polysmallR = polysmall/2
         polysmallr = polysmallR*math.cos(math.pi/polysides)
         polysmalltabht = tab_height
+        
         if polysmallr < polysmalltabht:
            polysmalltabht = polysmallr
-        if polylimit <=1 or polylimit > polysides :
-           polylimit = polysides
+           
+        if (halfpoly) and  ((polysides % 2)==0):
+           polylimit = polysides // 2
         wpaths = []
         done = 0
         # We go through this loop twice
