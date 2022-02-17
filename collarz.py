@@ -460,7 +460,7 @@ class Collar(inkex.EffectExtension):
         layer.append(bgroup)
       
       else:
-         pdstr2 += scorepath
+         pdstr2 = scorepath + pdstr2
          self.drawline(str(pdstr2),'backing',layer,sstr=None) #output the back piece      
       return 
 
@@ -612,7 +612,7 @@ class Collar(inkex.EffectExtension):
                         self.drawline(str(wpath.path),'wrapper'+str(pc),layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
                 else:
                     if lines_on_wrapper:
-                        wpath.path += dscores # Output scorelines with wrapper
+                        wpath.path = dscores + wpath.path # Output scorelines with wrapper
                     self.drawline(str(wpath.path),'wrapper'+str(pc),layer,sstr="fill:#ffdddd;stroke:#000000;stroke-width:0.25") # Output the wrapper
                 while len(wpath.path) > 0:
                     del wpath.path[0]
