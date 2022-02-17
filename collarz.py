@@ -677,7 +677,7 @@ class Collar(inkex.EffectExtension):
                    layer.append(group)
                 else:
                    # lump together all the score lines with the model
-                   dprop += dscores
+                   dprop = dscores + dprop
                    self.drawline(dprop,'model'+str(pc),layer,sstr=None) # Output the model
 
              # At this point, we can generate the top and bottom polygons
