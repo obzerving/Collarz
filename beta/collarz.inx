@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Collar</name>
+  <id>org.inkscape.collarz</id>
+    <param name="usermenu" type="notebook">
+      <page name="settings" gui-text="Settings">
+        <param name ="polysides" type="int" min="3" max="360" gui-text="Number of Polygon Sides:">6</param>
+        <param name ="poly1size" type="float" precision="3" min="0.2" max="9999.0" gui-text="Size of Polygon 1 (in Dimensional Units):">5.0</param>
+        <param name ="poly2size" type="float" precision="3" min="0.2" max="9999.0" gui-text="Size of Polygon 2 (in Dimensional Units):">3.0</param>
+        <param name="halfpoly" type="bool" gui-text="For polygons with even number of sides, make half 'round':">false</param>
+		<param name ="collarheight" type="float" precision="3" min="0.2" max="9999.0" gui-text="Height of Collar (in Dimensional Units):">5.0</param>
+        <param name ="collarparts" type="int" min="1" max="10" gui-text="Number of parts to divide collar into:">1</param>
+        <param name ="tabangle" type="float" min="0.0" max="90.0" gui-text="Angle of tab edges (degrees):">45.0</param>
+        <param name="tabheight" type="float" precision="3" min="0.01" max="9999.0" gui-text="Height of tab (in Dimensional Units):">0.4</param>
+        <param name="dashlength" type="float" precision="3" min="0.0" max="9999.0" gui-text="Length of dashline(zero for solid line) (in Dimensional Units):">0.1</param>
+        <param name="linesonwrapper" type="bool" gui-text="Put dashlines on wrappers:">true</param>
+        <param name="circumscribed" type="bool" gui-text="Use circumscribed diameter:">true</param>
+		
+        <!-- To Do
+        <param name="tabsets" type="optiongroup" appearance="combo" gui-text="Tab placement on cutouts:">
+            <option translatable="no" value="inside">inside</option>
+            <option translatable="no" value="outside">outside</option>
+            <option translatable="no" value="both">both</option>
+        </param>
+        -->
+        <param name="unit" type="optiongroup" appearance="combo" gui-text="Dimensional units:">
+            <option translatable="no" value="in">in</option>
+            <option translatable="no" value="px">px</option>
+            <option translatable="no" value="pt">pt</option>
+            <option translatable="no" value="ft">ft</option>
+            <option translatable="no" value="yd">yd</option>
+            <option translatable="no" value="mm">mm</option>
+            <option translatable="no" value="cm">cm</option>
+            <option translatable="no" value="m">m</option>
+            <option translatable="no" value="km">km</option>
+        </param>
+      </page>
+      <page name="_help" gui-text="Help">
+        <label xml:space="preserve">Given the number of sides and sizes of two polygons, this program generates (1) a paper model of a collar with tabs to assemble between the polygons; (2) the two polygons themselves; and (3) strips for covering the tabbed collar. You can also specify certain tab parameters, but be aware that the program might adjust them to avoid problems.</label>
+      </page>
+    </param>
+  <effect needs-live-preview="false">
+    <!--object-type>path</object-type-->
+    <effects-menu>
+      <submenu name="Papercraft"/>
+    </effects-menu>
+  </effect>
+  <script>
+    <command location="inx" interpreter="python">collarz.py</command>
+  </script>
+</inkscape-extension>
